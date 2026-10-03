@@ -7,12 +7,14 @@ Flow: /extract (Gemma reads the photo -> JSON)  ->  user edits table in browser
 """
 import os
 
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 from google import genai
 
 import core
 
-# Apni key yahan paste karo, ya (behtar) terminal mein GEMINI_API_KEY set karo.
+load_dotenv()  # .env file se GEMINI_API_KEY padhta hai
+
 API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
 MODEL = core.DEFAULT_MODEL
 
