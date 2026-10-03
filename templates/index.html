@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Receipt Splitter & Actioner</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --card: #fff;
+      --text: #1c1f24;
+      --muted: #6b7280;
+      --line: #e2e5ea;
+      --accent: #2563eb;
+      --warn: #b45309;
+      --ok: #15803d;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14161a;
+        --card: #1d2026;
+        --text: #e8eaed;
+        --muted: #9aa1ab;
+        --line: #2e333b;
+        --accent: #5b8def;
+        --warn: #f59e0b;
+        --ok: #4ade80;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px 16px 60px;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 1.6rem;
+    }
+
+    .sub {
+      color: var(--muted);
+      margin: 0 0 20px;
+    }
+
+    section,
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    h2 {
+      font-size: 1.05rem;
+      margin: 0 0 12px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: .8rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font: inherit;
+    }
+
+    button,
+    .btn {
+      padding: 9px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    #preview {
+      max-width: 100%;
+      max-height: 260px;
+      border-radius: 8px;
+      margin-top: 12px;
+      border: 1px solid var(--line);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: .92rem;
+    }
+
+    th,
+    td {
+      padding: 6px 6px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+
+    td input.num {
+      width: 90px;
+    }
+
+    td.c,
+    th.c {
+      text-align: center;
+    }
+
+    td input[type=checkbox] {
+      width: auto;
+    }
+
+    button.x {
+      background: transparent;
+      color: var(--muted);
+      padding: 2px 8px;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: .92rem;
+    }
+
+    .status.err {
+      color: #dc2626;
+    }
+
+    .banner {
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: .92rem;
+      border: 1px solid var(--line);
+    }
+
+    .banner.warn {
+      color: var(--warn);
+    }
+
+    .banner.ok {
+      color: var(--ok);
+    }
+
+    .banner.note {
+      color: var(--muted);
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font: inherit;
+      background: var(--bg);
+      padding: 10px;
+      border-radius: 8px;
+      margin: 8px 0;
+    }
+
+    .total-line {
+      color: var(--muted);
+      font-size: .9rem;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <h1>🧾 Receipt Splitter &amp; Actioner</h1>
+    <p class="sub">Photo upload karo → items parse → share nikalo → payment message ready.</p>
+
+    <section>
+      <h2>1. Setup</h2>
+      <div class="grid">
+        <div><label for="task">Task</label>
+          <select id="task">
+            <option value="split">Split Bill</option>
+            <option value="expense">Extract Expense</option>
+          </select>
+        </div>
+        <div class="split-only"><label for="names">Names (comma separated)</label>
+          <input id="names" value="Me, Rahul, Aman">
+        </div>
+        <div class="split-only"><label for="payer">Who paid?</label><select id="payer"></select></div>
+        <div class="split-only"><label for="method">Split method</label>
+          <select id="method">
+            <option value="itemwise">Item-wise (who ate what)</option>
+            <option value="equal">Equal split</option>
+          </select>
+        </div>
+        <div class="split-only"><label for="tip">Tip %</label><input id="tip" type="number" min="0" max="30" step="1"
+            value="0"></div>
+        <div class="split-only"><label for="lang">Message language</label>
+          <select id="lang">
+            <option>English</option>
+            <option>Hinglish</option>
+          </select>
+        </div>
+        <div class="split-only"><label for="upi">Your UPI ID (optional)</label><input id="upi" placeholder="name@upi">
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <label for="file">Receipt photo</label>
+        <input id="file" type="file" accept="image/*">
+        <img id="preview" class="hidden" alt="Receipt preview">
+      </div>
+      <div class="actions"><button id="process">Process receipt</button></div>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section id="review" class="hidden">
+      <h2>2. Review &amp; correct</h2>
+      <div class="grid">
+        <div><label for="merchant">Merchant</label><input id="merchant"></div>
+        <div><label for="date">Date</label><input id="date"></div>
+        <div><label for="category">Category</label><input id="category"></div>
+        <div><label for="total">Receipt total</label><input id="total" type="number" step="any"></div>
+      </div>
+      <div id="notes"></div>
+      <div class="table-wrap" style="margin-top:12px">
+        <table id="items"></table>
+      </div>
+      <div class="split-hint split-only total-line">Tick karo kaun-kaun ne item khaya. Kisi par tick nahi = sab mein
+        barabar.</div>
+      <div class="actions">
+        <button class="secondary" id="addRow">+ Add item</button>
+        <button id="calc">Calculate</button>
+      </div>
+    </section>
+
+    <section id="results" class="hidden"></section>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    let data = null;   // raw extraction result from the server
+    let rows = [];     // editable items: {name, qty, price, who:{person:bool}}
+    let cardN = 0;
+    let csvText = '';
+
+    const people = () => [...new Set($('names').value.split(',').map(s => s.trim()).filter(Boolean))];
+    const isSplit = () => $('task').value === 'split';
+    const isItemwise = () => isSplit() && $('method').value === 'itemwise';
+
+    function setStatus(msg, err) { $('status').textContent = msg; $('status').className = 'status' + (err ? ' err' : ''); }
+
+    function refreshPayer() {
+      const cur = $('payer').value, ps = people();
+      $('payer').innerHTML = ps.map(p => `<option>${esc(p)}</option>`).join('');
+      if (ps.includes(cur)) $('payer').value = cur;
+    }
+
+    function refreshTaskUI() {
+      document.querySelectorAll('.split-only').forEach(el => el.classList.toggle('hidden', !isSplit()));
+      $('results').classList.add('hidden');
+      if (data) renderTable();
+    }
+
+    function renderTable() {
+      const showWho = isItemwise(), ps = people();
+      let h = '<tr><th>Item</th><th>Qty</th><th>Price</th>';
+      if (showWho) h += ps.map(p => `<th class="c">${esc(p)}</th>`).join('');
+      h += '<th></th></tr>';
+      rows.forEach((r, i) => {
+        h += `<tr><td><input data-i="${i}" data-f="name" value="${esc(r.name)}"></td>
+      <td><input class="num" type="number" step="any" data-i="${i}" data-f="qty" value="${esc(r.qty)}"></td>
+      <td><input class="num" type="number" step="any" data-i="${i}" data-f="price" value="${esc(r.price)}"></td>`;
+        if (showWho) ps.forEach(p => {
+          h += `<td class="c"><input type="checkbox" data-i="${i}" data-p="${esc(p)}" ${r.who[p] !== false ? 'checked' : ''}></td>`;
+        });
+        h += `<td><button class="x" data-del="${i}" title="Remove">✕</button></td></tr>`;
+      });
+      $('items').innerHTML = h;
+    }
+
+    $('items').addEventListener('input', e => {
+      const t = e.target, i = t.dataset.i;
+      if (i === undefined) return;
+      if (t.dataset.f) rows[i][t.dataset.f] = t.value;
+      else if (t.dataset.p !== undefined) rows[i].who[t.dataset.p] = t.checked;
+    });
+    $('items').addEventListener('click', e => {
+      const del = e.target.dataset.del;
+      if (del !== undefined) { rows.splice(+del, 1); renderTable(); }
+    });
+    $('addRow').onclick = () => { rows.push({ name: '', qty: 1, price: 0, who: {} }); renderTable(); };
+
+    $('task').onchange = refreshTaskUI;
+    $('method').onchange = () => { if (data) renderTable(); };
+    $('names').oninput = () => { refreshPayer(); if (data) renderTable(); };
+    $('file').onchange = () => {
+      const f = $('file').files[0];
+      if (!f) return $('preview').classList.add('hidden');
+      $('preview').src = URL.createObjectURL(f);
+      $('preview').classList.remove('hidden');
+    };
+
+    $('process').onclick = async () => {
+      const f = $('file').files[0];
+      if (!f) return setStatus('Pehle receipt ki photo chuno.', true);
+      setStatus('Receipt padh raha hoon...');
+      $('process').disabled = true;
+      const fd = new FormData(); fd.append('receipt', f);
+      try {
+        const r = await fetch('/extract', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || 'Extraction fail hua');
+        data = j;
+        rows = j.items.map(i => ({ name: i.name, qty: i.qty, price: i.price, who: {} }));
+        $('merchant').value = j.merchant || '';
+        $('date').value = j.date || '';
+        $('category').value = j.category || '';
+        $('total').value = j.total;
+        $('notes').innerHTML = j.confidence_notes ? `<div class="banner note" style="margin-top:12px">Model note: ${esc(j.confidence_notes)}</div>` : '';
+        renderTable();
+        $('review').classList.remove('hidden');
+        $('results').classList.add('hidden');
+        setStatus('');
+      } catch (e) {
+        setStatus('Error: ' + e.message, true);
+      } finally {
+        $('process').disabled = false;
+      }
+    };
+
+    function payload() {
+      const ps = people();
+      return {
+        items: rows.map(r => ({ name: r.name, qty: r.qty, price: r.price, who: ps.filter(p => r.who[p] !== false) })),
+        people: ps, payer: $('payer').value, total: $('total').value, tip_pct: $('tip').value,
+        method: $('method').value, lang: $('lang').value, upi: $('upi').value,
+        merchant: $('merchant').value, date: $('date').value, category: $('category').value,
+        currency: data.currency, taxes: data.taxes,
+      };
+    }
+
+    function msgCard(title, text) {
+      const id = 'msg' + (++cardN);
+      return `<div class="card"><b>${esc(title)}</b><pre id="${id}">${esc(text)}</pre>
+    <button data-copy="${id}">Copy message</button>
+    <a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(text)}">Send on WhatsApp</a></div>`;
+    }
+
+    function checkBanner(j) {
+      const m = n => j.symbol + Number(n).toFixed(2);
+      return j.ok
+        ? '<div class="banner ok">Total match ho gaya ✅</div>'
+        : `<div class="banner warn">Items + tax = ${m(j.calc)} lekin receipt total = ${m($('total').value || 0)}. Table verify karo.</div>`;
+    }
+
+    $('calc').onclick = async () => {
+      const url = isSplit() ? '/calculate' : '/expense';
+      $('calc').disabled = true;
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload()) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || 'Calculation fail hua');
+        isSplit() ? renderSplit(j) : renderExpense(j);
+        $('results').classList.remove('hidden');
+        $('results').scrollIntoView({ behavior: 'smooth' });
+      } catch (e) {
+        alert('Error: ' + e.message);
+      } finally {
+        $('calc').disabled = false;
+      }
+    };
+
+    function renderSplit(j) {
+      const m = n => j.symbol + Number(n).toFixed(2);
+      let h = '<h2>3. Result</h2>' + checkBanner(j);
+      h += `<div class="total-line">Items ${m(j.items_sum)} · Taxes/charges ${m(j.extra)} · Tip ${m(j.tip)} · <b>Grand total ${m(j.grand)}</b> · Paid by <b>${esc(j.payer)}</b></div>`;
+      h += '<div class="table-wrap"><table><tr><th>Person</th><th>Share</th><th>Items</th></tr>';
+      for (const [p, a] of Object.entries(j.shares)) {
+        h += `<tr><td>${esc(p)}</td><td><b>${m(a)}</b></td><td>${esc((j.owned[p] || []).join(', ') || (isItemwise() ? '-' : 'equal split'))}</td></tr>`;
+      }
+      h += '</table></div><h2 style="margin-top:20px">4. Payment messages</h2>';
+      h += msgCard('Group message', j.group);
+      for (const [p, text] of Object.entries(j.messages)) h += msgCard('For ' + p, text);
+      h += `<details><summary>Markdown table</summary>${msgCard('Markdown', j.markdown)}</details>`;
+      $('results').innerHTML = h;
+    }
+
+    function renderExpense(j) {
+      csvText = j.csv;
+      let h = '<h2>3. Expense summary</h2>' + checkBanner(j);
+      h += msgCard('Summary', j.summary) + msgCard('Markdown table', j.markdown);
+      h += '<div class="actions"><button id="dl">Download CSV</button></div>';
+      $('results').innerHTML = h;
+      $('dl').onclick = () => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([csvText], { type: 'text/csv' }));
+        a.download = 'expense.csv'; a.click();
+      };
+    }
+
+    $('results').addEventListener('click', async e => {
+      const id = e.target.dataset.copy;
+      if (!id) return;
+      const text = $(id).textContent;
+      try { await navigator.clipboard.writeText(text); }
+      catch { const r = document.createRange(); r.selectNodeContents($(id)); getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
+      const old = e.target.textContent; e.target.textContent = 'Copied ✓';
+      setTimeout(() => e.target.textContent = old, 1200);
+    });
+
+    refreshPayer();
+    refreshTaskUI();
+  </script>
+</body>
+
+</html>
