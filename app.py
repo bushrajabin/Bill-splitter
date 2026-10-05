@@ -1,9 +1,6 @@
-"""Receipt Splitter & Actioner (Flask version)
+"""Receipt Splitter (Flask version)
 
 Run:  python app.py   ->   http://127.0.0.1:5000
-
-Flow: /extract (Gemma reads the photo -> JSON)  ->  user edits table in browser
-      -> /calculate (Python does the math + drafts messages)  or  /expense (CSV + summary)
 """
 import os
 
@@ -13,9 +10,9 @@ from google import genai
 
 import core
 
-load_dotenv()  # .env file se GEMINI_API_KEY padhta hai
+load_dotenv()  # reads GEMINI_API_KEY from the .env file
 
-API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
+API_KEY = os.getenv("GEMINI_API_KEY")
 MODEL = core.DEFAULT_MODEL
 
 app = Flask(__name__)
@@ -26,8 +23,8 @@ _client = None
 
 def get_client():
     global _client
-    if API_KEY == "YOUR_GEMINI_API_KEY":
-        raise RuntimeError("API key set nahi hai. app.py mein API_KEY daalo ya GEMINI_API_KEY env var set karo.")
+    if not API_KEY:
+        raise RuntimeError("API key is not set. Add GEMINI_API_KEY to your .env file.")
     if _client is None:
         _client = genai.Client(api_key=API_KEY)
     return _client
@@ -60,15 +57,20 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/result.html")
+def result_page():
+    return render_template("result.html")
+
+
 @app.route("/extract", methods=["POST"])
 def extract():
     file = request.files.get("receipt")
     if not file:
-        return jsonify(error="No image uploaded"), 400
+        return jsonify(error="No image received"), 400
     try:
         img, mime = core.prepare_image(file.read())
     except Exception:
-        return jsonify(error="Ye image file padh nahi paya. JPG ya PNG try karo."), 400
+        return jsonify(error="Could not read this image. Try a JPG or PNG."), 400
     try:
         data = core.extract_receipt(get_client(), img, mime, MODEL)
         data["symbol"] = symbol_for(data["currency"])
@@ -82,10 +84,10 @@ def calculate():
     p = request.get_json(silent=True) or {}
     people = list(dict.fromkeys(str(n).strip() for n in (p.get("people") or []) if str(n).strip()))
     if len(people) < 2:
-        return jsonify(error="Kam se kam 2 naam chahiye."), 400
+        return jsonify(error="At least 2 names are required."), 400
     items = clean_items(p.get("items"))
     if not items:
-        return jsonify(error="Table mein koi item nahi hai."), 400
+        return jsonify(error="No valid items found. Check that every item has a price."), 400
 
     payer = p.get("payer") if p.get("payer") in people else people[0]
     total = core.to_float(p.get("total"))
@@ -93,7 +95,7 @@ def calculate():
         total = round(sum(i["price"] for i in items), 2)
     tip_pct = core.to_float(p.get("tip_pct"), 0.0) or 0.0
     method = "equal" if p.get("method") == "equal" else "itemwise"
-    lang = "Hinglish" if p.get("lang") == "Hinglish" else "English"
+    lang = "English"
     upi = str(p.get("upi") or "").strip()
     merchant = str(p.get("merchant") or "").strip() or None
     symbol = symbol_for(p.get("currency"))
@@ -127,7 +129,7 @@ def expense():
     p = request.get_json(silent=True) or {}
     items = clean_items(p.get("items"))
     if not items:
-        return jsonify(error="Table mein koi item nahi hai."), 400
+        return jsonify(error="No valid items found. Check that every item has a price."), 400
     total = core.to_float(p.get("total"))
     if total is None:
         total = round(sum(i["price"] for i in items), 2)
@@ -146,4 +148,4 @@ def expense():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Result - Receipt Splitter</title>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5ea; --accent:#2563eb; --warn:#b45309; --ok:#15803d; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#14161a; --card:#1d2026; --text:#e8eaed; --muted:#9aa1ab; --line:#2e333b; --accent:#5b8def; --warn:#f59e0b; --ok:#4ade80; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    main { max-width:720px; margin:0 auto; padding:20px 16px 60px; }
+    h1 { margin:0 0 16px; font-size:1.5rem; }
+    h2 { font-size:1.05rem; margin:0 0 12px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+    button, .btn { padding:10px 14px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; text-decoration:none; display:inline-block; }
+    .secondary { background:transparent; color:var(--text); border:1px solid var(--line); }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .table-wrap { overflow-x:auto; }
+    table { border-collapse:collapse; width:100%; font-size:.92rem; }
+    th, td { padding:6px; border-bottom:1px solid var(--line); text-align:left; }
+    .banner { padding:10px 12px; border-radius:8px; margin-bottom:12px; font-size:.92rem; border:1px solid var(--line); }
+    .banner.warn { color:var(--warn); }
+    .banner.ok { color:var(--ok); }
+    .muted { color:var(--muted); font-size:.9rem; margin-bottom:8px; }
+    pre { white-space:pre-wrap; word-break:break-word; font:inherit; background:var(--bg); padding:10px; border-radius:8px; margin:8px 0; }
+    .top { margin-bottom:16px; }
+  </style>
+</head>
+
+<body>
+  <main>
+    <div class="top"><a class="btn secondary" href="index.html">&larr; Scan another receipt</a></div>
+    <h1>Result</h1>
+    <div id="out"></div>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem('receiptResult')); } catch { }
+
+    if (!saved) {
+      $('out').innerHTML = '<div class="card">No result found. Please scan a receipt first.</div>';
+    } else {
+      const { split, itemwise, receiptTotal, result: j } = saved;
+      const m = n => (j.symbol || '') + Number(n).toFixed(2);
+      let cardN = 0;
+
+      const msgCard = (title, text) => {
+        const id = 'msg' + (++cardN);
+        return `<div class="card"><b>${esc(title)}</b><pre id="${id}">${esc(text)}</pre>
+        <div class="actions"><button data-copy="${id}">Copy</button>
+        <a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(text)}">WhatsApp</a></div></div>`;
+      };
+
+      const banner = j.ok
+        ? '<div class="banner ok">Totals match.</div>'
+        : `<div class="banner warn">Items + tax = ${m(j.calc)} but receipt total = ${m(receiptTotal || 0)}. Please check the items.</div>`;
+
+      let h = '';
+      if (split) {
+        h += '<div class="card">' + banner;
+        h += `<div class="muted">Items ${m(j.items_sum)} &middot; Taxes ${m(j.extra)} &middot; Tip ${m(j.tip)} &middot; <b>Total ${m(j.grand)}</b> &middot; Paid by <b>${esc(j.payer)}</b></div>`;
+        h += '<div class="table-wrap"><table><tr><th>Person</th><th>Share</th><th>Items</th></tr>';
+        for (const [p, a] of Object.entries(j.shares)) {
+          h += `<tr><td>${esc(p)}</td><td><b>${m(a)}</b></td><td>${esc((j.owned[p] || []).join(', ') || (itemwise ? '-' : 'equal split'))}</td></tr>`;
+        }
+        h += '</table></div></div>';
+        h += '<h2>Messages</h2>' + msgCard('Group', j.group);
+        for (const [p, text] of Object.entries(j.messages)) h += msgCard(p, text);
+        h += `<details><summary>Markdown table</summary>${msgCard('Markdown', j.markdown)}</details>`;
+      } else {
+        h += '<div class="card">' + banner + '</div>';
+        h += msgCard('Summary', j.summary) + msgCard('Markdown table', j.markdown);
+        h += '<div class="actions"><button id="dl">Download CSV</button></div>';
+      }
+      $('out').innerHTML = h;
+
+      if (!split) {
+        $('dl').onclick = () => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([j.csv], { type: 'text/csv' }));
+          a.download = 'expense.csv'; a.click();
+        };
+      }
+
+      $('out').addEventListener('click', async e => {
+        const id = e.target.dataset.copy;
+        if (!id) return;
+        const text = $(id).textContent;
+        try { await navigator.clipboard.writeText(text); }
+        catch { const r = document.createRange(); r.selectNodeContents($(id)); getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
+        const old = e.target.textContent; e.target.textContent = 'Copied';
+        setTimeout(() => e.target.textContent = old, 1200);
+      });
+    }
+  </script>
+</body>
+
+</html>
