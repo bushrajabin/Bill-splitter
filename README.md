@@ -4,7 +4,6 @@ Scan a receipt with your phone, tick who shared each item, and get exact amounts
 
 Live demo: https://scan-and-split.vercel.app/
 
-Add a screenshot or GIF here: ![Demo](docs/demo.gif)
 
 Why
 
