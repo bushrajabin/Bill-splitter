@@ -34,9 +34,34 @@
     .status { margin-top:10px; font-size:.92rem; color:var(--muted); }
     .status.err { color:#dc2626; }
     .note { color:var(--muted); font-size:.9rem; margin-top:8px; }
-    #camBox { margin-top:12px; }
-    #video { width:100%; max-height:70vh; background:#000; border-radius:10px; object-fit:cover; }
     #shot { max-width:100%; max-height:220px; border-radius:8px; border:1px solid var(--line); margin-top:12px; }
+
+    /* ---------- popup (modal) ---------- */
+    .overlay {
+      position:fixed; inset:0; z-index:100;
+      display:flex; align-items:center; justify-content:center;
+      padding:16px;
+      background:rgba(0,0,0,.45);
+      -webkit-backdrop-filter:blur(8px);
+      backdrop-filter:blur(8px);
+    }
+    .modal {
+      width:100%; max-width:480px;
+      background:var(--card); border:1px solid var(--line);
+      border-radius:16px; padding:14px;
+      box-shadow:0 20px 50px rgba(0,0,0,.35);
+    }
+    .modal h2 { margin:0 0 10px; }
+    #video { width:100%; max-height:65vh; background:#000; border-radius:10px; object-fit:cover; display:block; }
+    .modal .actions { justify-content:space-between; }
+    .modal .actions button { flex:1; }
+    .loading-modal { text-align:center; padding:28px 20px; max-width:300px; }
+    .spinner {
+      width:36px; height:36px; margin:0 auto 12px;
+      border:4px solid var(--line); border-top-color:var(--accent);
+      border-radius:50%; animation:spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
   </style>
 </head>
 
@@ -85,17 +110,8 @@
       <div class="actions" style="margin-top:0">
         <button id="scan">Scan with camera</button>
       </div>
-      <!-- fallback: opens the phone camera directly (no gallery upload) -->
+      <!-- fallback: opens the phone's own camera (no gallery upload) -->
       <input id="fallback" type="file" accept="image/*" capture="environment" class="hidden">
-
-      <div id="camBox" class="hidden">
-        <video id="video" autoplay playsinline muted></video>
-        <div class="actions">
-          <button id="snap">Capture</button>
-          <button class="secondary" id="closeCam">Cancel</button>
-        </div>
-      </div>
-
       <img id="shot" class="hidden" alt="Scanned receipt">
       <div id="status" class="status"></div>
     </div>
@@ -118,6 +134,26 @@
     </div>
   </main>
 
+  <!-- Camera popup -->
+  <div id="camOverlay" class="overlay hidden">
+    <div class="modal">
+      <h2>Scan receipt</h2>
+      <video id="video" autoplay playsinline muted></video>
+      <div class="actions">
+        <button class="secondary" id="closeCam">Cancel</button>
+        <button id="snap">Capture</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading popup -->
+  <div id="loadOverlay" class="overlay hidden">
+    <div class="modal loading-modal">
+      <div class="spinner"></div>
+      <div id="loadText">Reading receipt...</div>
+    </div>
+  </div>
+
   <script>
     const $ = id => document.getElementById(id);
     const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -131,6 +167,10 @@
     const isItemwise = () => isSplit() && $('method').value === 'itemwise';
 
     function setStatus(msg, err) { $('status').textContent = msg; $('status').className = 'status' + (err ? ' err' : ''); }
+
+    function lockScroll(on) { document.body.style.overflow = on ? 'hidden' : ''; }
+    function showLoading(text) { $('loadText').textContent = text; $('loadOverlay').classList.remove('hidden'); lockScroll(true); }
+    function hideLoading() { $('loadOverlay').classList.add('hidden'); lockScroll(false); }
 
     /* ---------- setup ---------- */
     function refreshPayer() {
@@ -146,17 +186,19 @@
     $('method').onchange = () => { if (data) renderTable(); };
     $('names').oninput = () => { refreshPayer(); if (data) renderTable(); };
 
-    /* ---------- camera scan ---------- */
+    /* ---------- camera popup ---------- */
+    function openCam() { $('camOverlay').classList.remove('hidden'); lockScroll(true); }
     function stopCam() {
       if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
       $('video').srcObject = null;
-      $('camBox').classList.add('hidden');
+      $('camOverlay').classList.add('hidden');
+      lockScroll(false);
     }
 
     $('scan').onclick = async () => {
       setStatus('');
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        $('fallback').click();   // camera API unavailable (e.g. not HTTPS) -> native camera
+        $('fallback').click();   // camera API unavailable (e.g. plain http) -> phone's own camera
         return;
       }
       try {
@@ -165,13 +207,14 @@
           audio: false
         });
         $('video').srcObject = stream;
-        $('camBox').classList.remove('hidden');
+        openCam();
       } catch (e) {
-        $('fallback').click();   // permission denied or no camera -> native camera capture
+        $('fallback').click();   // permission denied or no camera -> phone's own camera
       }
     };
 
     $('closeCam').onclick = stopCam;
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && stream) stopCam(); });
 
     $('snap').onclick = () => {
       const v = $('video');
@@ -181,7 +224,7 @@
       c.width = Math.round(v.videoWidth * scale);
       c.height = Math.round(v.videoHeight * scale);
       c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-      stopCam();
+      stopCam();                                   // popup closes, page is normal again
       c.toBlob(b => processBlob(b), 'image/jpeg', 0.85);
     };
 
@@ -194,7 +237,7 @@
     async function processBlob(blob) {
       $('shot').src = URL.createObjectURL(blob);
       $('shot').classList.remove('hidden');
-      setStatus('Reading receipt...');
+      showLoading('Reading receipt...');
       $('scan').disabled = true;
       const fd = new FormData();
       fd.append('receipt', blob, 'receipt.jpg');
@@ -215,7 +258,9 @@
       } catch (e) {
         setStatus('Error: ' + e.message, true);
       } finally {
+        hideLoading();
         $('scan').disabled = false;
+        if (data) $('review').scrollIntoView({ behavior: 'smooth' });
       }
     }
 
@@ -263,6 +308,7 @@
     $('calc').onclick = async () => {
       const split = isSplit();
       $('calc').disabled = true;
+      showLoading('Calculating...');
       try {
         const r = await fetch(split ? '/calculate' : '/expense', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload())
@@ -272,8 +318,9 @@
         sessionStorage.setItem('receiptResult', JSON.stringify({
           split, itemwise: isItemwise(), receiptTotal: $('total').value, result: j
         }));
-        location.href = 'result.html';
+        location.href = '/result.html';
       } catch (e) {
+        hideLoading();
         alert('Error: ' + e.message);
         $('calc').disabled = false;
       }
