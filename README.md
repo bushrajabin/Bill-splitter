@@ -34,6 +34,8 @@ Python, Flask
 Gemini API (google-genai)
 HTML, CSS and vanilla JavaScript
 Deployed on Vercel
+
+
 Project structure
 .
 ├── app.py              # Flask routes: /, /extract, /calculate, /expense, /result.html
@@ -44,6 +46,9 @@ Project structure
 └── templates/
     ├── index.html      # Scan, review and calculate
     └── result.html     # Results page
+
+
+    
 Run locally
 bash
 git clone https://github.com/bushrajabin/Bill-splitter.git
